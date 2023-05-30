@@ -1,0 +1,283 @@
+turtPosX = 0
+turtPosY = 0
+orient = 0
+
+function tableLength(T)
+    local count = 0
+    for _ in pairs(T) do count = count + 1 end
+    return count
+  end
+
+function vectorDist(vect)
+    sum = vect.x + vect.z
+    return sum
+end
+
+function getDest()
+    repeat
+        io.write("Please Input x coordinate: ")
+        local userInput = io.read()
+        x = tonumber(userInput)
+        io.write("Please Input y coordinate: ")
+        userInput = io.read()
+        y = tonumber(userInput)
+        io.write("Please Input z coordinate: ")
+        userInput = io.read()
+        z = tonumber(userInput)
+    until(x ~= nil and y ~= nil and z ~= nil)
+    local coords = vector.new(x,y,z)
+    return coords
+end
+
+function calculateDistance(location,destination)
+    local distance = destination - location
+    --absDistance = vector.new(math.abs(distance.x),math.abs(distance.y),math.abs(distance.z))
+    return distance
+end
+
+function getOrientation()
+    local loc1 = vector.new(gps.locate(2, false))
+    if not turtle.forward() then
+        for j=1,4 do
+            turtle.turnRight()
+            if turtle.forward() then
+                break
+            end
+
+        end
+    end
+    local loc2 = vector.new(gps.locate(2, false))
+    local heading = loc2 - loc1
+    dir = ((heading.x + math.abs(heading.x) * 2) + (heading.z + math.abs(heading.z) * 3))
+    numDir = dir
+    --String representation of directions
+    --[[if dir == 2 then
+        dir = "North"
+    elseif dir == 1 then
+        dir = "West"
+    elseif dir = 4 then
+        dir = "South
+    elseif dir == 3 then
+        dir = "East"
+    end]]--
+    return dir
+    end
+    
+    --[[orientation will be:
+    -x = 1 'West'
+    -z = 2 'North'
+    +x = 3 'East'
+    +z = 4 'South'
+    This matches exactly with orientation in game, except that Minecraft uses 0 for +z instead of 4.
+    --]]
+
+function left(orientation)
+    if turtle then turtle.turnLeft() end
+    orientation = orientation - 1
+    if orientation < 1 then orientation = orientation + 4 end
+    return orientation
+end
+    
+function right(orientation)
+    if turtle then turtle.turnRight() end
+    orientation = orientation + 1
+    if orientation > 4 then orientation = orientation - 4 end
+    return orientation
+end
+
+--Make empty 2d table with variable size and populate with zeroes
+function getEmptyFlood(dist)
+    absDistance = vector.new(math.abs(dist.x),math.abs(dist.y),math.abs(dist.z))
+    local emptyTable = {}
+    --Amount to increase array size around turt and dest
+    local padding = 1
+
+    rawSizeX = math.max(6,absDistance.x)
+    rawSizeY = math.max(6,absDistance.z)
+    
+    local sizeX = math.ceil(rawSizeX * padding)
+    local sizeY = math.ceil(rawSizeY * padding)
+    for i = 1,sizeY do
+        emptyTable[i] = {}
+        for j = 1,sizeX do
+            emptyTable[i][j] = 0
+        end
+    end
+    return emptyTable
+end
+
+function getFlood(dist)
+    absDistance = vector.new(math.abs(dist.x),math.abs(dist.y),math.abs(dist.z))
+
+    emptyFlood = getEmptyFlood(dist)
+
+    print("X length = ",tableLength(emptyFlood))
+    print("Y length = ",tableLength(emptyFlood[1]))
+
+    --Position to place turtle from top of table
+    if dist.z < 0 then
+        turtPosX = math.ceil(tableLength(emptyFlood)*(2/3))                     --absDistance.x * 2
+        if dist.x == 0 then
+            turtPosX = math.ceil(tableLength(emptyFlood)*(3/4))
+        end
+    elseif dist.z > 0 then
+        turtPosX = math.ceil(tableLength(emptyFlood)*(1/3))                     --absDistance.x
+        if dist.x == 0 then
+            turtPosX = math.ceil(tableLength(emptyFlood)*(1/4))
+        end
+    elseif dist.z == 0 then
+        turtPosX = math.ceil((tableLength(emptyFlood))/2)
+    end
+    
+    --Position to place turtle from left of table
+    if dist.x < 0 then
+        turtPosY = math.ceil(tableLength(emptyFlood[1])*(2/3))                               --absDistance.z * 2
+        if dist.z == 0 then
+            turtPosY = math.ceil(tableLength(emptyFlood[1])*(3/4))
+        end
+    elseif dist.x > 0 then
+        turtPosY = math.ceil(tableLength(emptyFlood[1])*(1/3))                         --absDistance.z
+        if dist.z == 0 then
+            turtPosY = math.ceil(tableLength(emptyFlood[1])*(1/4))
+        end
+    elseif dist.x == 0 then
+        turtPosY = math.ceil((tableLength(emptyFlood[1]))/2)
+    end
+
+    destPosX = turtPosX + dist.z
+    destPosY = turtPosY + dist.x
+
+    print("TurtPos: ", turtPosX,",",turtPosY)
+    print("destPos: ", destPosX,",",destPosY)
+    print("Distance: ",dist.x,", ", dist.y,", ", dist.z,"\n")
+
+    --emptyFlood[turtPosX][turtPosY] = "X"
+
+    
+
+    for i,x in ipairs(emptyFlood) do
+        for j,y in ipairs(emptyFlood[i]) do
+            if emptyFlood[i][j] ~= "X" then
+                emptyFlood[i][j] = math.abs(destPosX - i) + math.abs(destPosY - j)
+            end
+        end
+    end
+
+    return emptyFlood
+end
+
+function updatePos(x,y,orient)
+
+    if(orient==4) then
+        x = x + 1
+    elseif(orient==1) then
+        y = y-1
+    elseif(orient==2) then
+        x = x-1
+    elseif(orient==3) then
+        y = y+1
+    end
+    return x,y
+end
+
+--Returns a direction with lowest num
+function findLowestCell(flood,x,y)
+    minValue = tableLength(flood) * tableLength(flood[1]) * 100
+    dirs = {}
+    
+    
+    dirs[2] = flood[x-1][y]
+    dirs[3] = flood[x][y+1]
+    dirs[4] = flood[x+1][y]
+    dirs[1] = flood[x][y-1]
+
+    print("North = ",dirs[2], " East = ", dirs[3]," South = ",dirs[4], " West = ",dirs[1])
+    
+
+    for i,v in ipairs(dirs) do
+        if v ~= nil and v~= "X" then
+            if v <= minValue then
+                minValue = v
+                dir = i
+            end
+        end
+    end
+
+    print("Shortest Dir is:", dir)
+
+    return dir
+end
+
+function moveTo(flood,orient,x,y)
+    newDir = findLowestCell(flood,x,y)
+
+    print("Prev dir = ",orient," New Dir = ",newDir)
+
+    while(newDir ~= orient) do
+        if orient - newDir == 1 or orient - newDir == -3 then 
+            --print(orient," - ", newDir," == ",orient-newDir)
+            orient = left(orient)
+        elseif orient - newDir == -1 or orient - newDir == 3 then
+            orient = right(orient)
+        else
+            orient = right(orient)
+        end
+    end
+
+    assert(turtle.forward())
+    turtPosX, turtPosY = updatePos(x,y,orient)
+    if flood[turtPosX][turtPosY] ~= 0 then
+        flood[turtPosX][turtPosY] = "X"
+    end
+    
+    return orient
+end
+
+function changeDest(flood,dest) 
+    currentLoc = vector.new(gps.locate(2,false))
+    --Next coords for destination
+    dest = {54,253,-38}
+    dest = vector.new(dest[1],dest[2],dest[3])
+    dist = calculateDistance(currentLoc,dest)
+    emptyFlood = getEmptyFlood(dist)
+    flood = getFlood(dist)
+    orient = moveTo(flood,orient,turtPosX,turtPosY)
+end
+
+function readLog(flood)
+    for i,v in ipairs(flood) do
+        for j,v2 in ipairs(flood[i]) do
+            io.write(v2," ")
+            os.sleep(0.01)
+        end
+        io.write("\n")   
+    end
+    print("Press '1' to continue: ")
+    userI = io.read()
+end
+
+--Main
+c1,c2,c3 = ...
+c1,c2,c3 = tonumber(c1),tonumber(c2),tonumber(c3)
+--Change this when not dev testing
+if c1==nil or c2==nil or c3 == nil then
+    c1 = 52
+    c2 = 253
+    c3 = -47
+end
+dest = vector.new(c1,c2,c3)
+orient = getOrientation()
+repeat
+currentLoc = vector.new(gps.locate(2,false))
+dist = calculateDistance(currentLoc,dest)
+emptyFlood = getEmptyFlood(dist)
+flood = getFlood(dist)
+orient = moveTo(flood,orient,turtPosX,turtPosY)
+
+--readLog(flood)
+
+until(flood[turtPosX][turtPosY] == 0)
+
+repeat
+    changeDest(flood,dest)
+until(flood[turtPosX][turtPosY] == 0) 
