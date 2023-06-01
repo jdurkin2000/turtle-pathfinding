@@ -1,6 +1,9 @@
+c1,c2,c3 = ...
+c1,c2,c3 = tonumber(c1),tonumber(c2),tonumber(c3)
 turtPosX = 0
 turtPosY = 0
 orient = 0
+blockLocs = {}
 
 function tableLength(T)
     local count = 0
@@ -9,7 +12,7 @@ function tableLength(T)
   end
 
 function vectorDist(vect)
-    sum = vect.x + vect.z
+    local sum = vect.x + vect.z
     return sum
 end
 
@@ -89,7 +92,7 @@ end
 function getEmptyFlood(dist)
     absDistance = vector.new(math.abs(dist.x),math.abs(dist.y),math.abs(dist.z))
     local emptyTable = {}
-    --Amount to increase array size around turt and dest
+    --Amount to increase array size around turt
     local padding = 1
 
     rawSizeX = math.max(6,absDistance.x)
@@ -180,16 +183,63 @@ function updatePos(x,y,orient)
     return x,y
 end
 
+function updateGPSPos(orient)
+    local myLoc = vector.new(gps.locate(2,false))
+    local x = tonumber(myLoc.x)
+    local y = tonumber(myLoc.z)
+
+    print(myLoc.x,myLoc.z)
+
+    if(orient==4) then
+        y = y+1
+    elseif(orient==1) then
+        x = x-1
+    elseif(orient==2) then
+        y = y-1
+    elseif(orient==3) then
+        x = x+1
+    end
+    return x,y
+end
+
 --Returns a direction with lowest num
 function findLowestCell(flood,x,y)
     minValue = tableLength(flood) * tableLength(flood[1]) * 100
     dirs = {}
     
-    
-    dirs[2] = flood[x-1][y]
-    dirs[3] = flood[x][y+1]
-    dirs[4] = flood[x+1][y]
-    dirs[1] = flood[x][y-1]
+    local myPos = vector.new(gps.locate(2,false))
+    local myPos2D = {myPos.x,myPos.z}
+    local northBlock = string.format("%s,%s",myPos2D[1],myPos2D[2]-1)
+    local eastBlock = string.format("%s,%s",myPos2D[1]+1,myPos2D[2])
+    local southBlock = string.format("%s,%s",myPos2D[1],myPos2D[2]+1)
+    local westBlock = string.format("%s,%s",myPos2D[1]-1,myPos2D[2])
+
+    print(northBlock)
+
+    if blockLocs[northBlock] ~= nil then
+        dirs[2] = "X"
+    else
+        dirs[2] = flood[x-1][y]
+    end
+
+    if blockLocs[eastBlock] ~= nil then
+        dirs[3] = "X"
+    else
+        dirs[3] = flood[x][y+1]
+    end
+
+    if blockLocs[southBlock] ~= nil then
+        dirs[4] = "X"
+    else
+        dirs[4] = flood[x+1][y]
+    end
+
+    if blockLocs[westBlock] ~= nil then
+        dirs[1] = "X"
+    else
+        dirs[1] = flood[x][y-1]
+    end
+
 
     print("North = ",dirs[2], " East = ", dirs[3]," South = ",dirs[4], " West = ",dirs[1])
     
@@ -209,27 +259,42 @@ function findLowestCell(flood,x,y)
 end
 
 function moveTo(flood,orient,x,y)
-    newDir = findLowestCell(flood,x,y)
+    local hasLooped = false
+    repeat
 
-    print("Prev dir = ",orient," New Dir = ",newDir)
-
-    while(newDir ~= orient) do
-        if orient - newDir == 1 or orient - newDir == -3 then 
-            --print(orient," - ", newDir," == ",orient-newDir)
-            orient = left(orient)
-        elseif orient - newDir == -1 or orient - newDir == 3 then
-            orient = right(orient)
-        else
-            orient = right(orient)
+        --Puts block in path into list to be potentially accessed again later
+        if hasLooped then
+            local blockX,blockY = updateGPSPos(orient)
+            local strX = tostring(blockX)
+            local strY = tostring(blockY)
+            local key = string.format("%s,%s",strX,strY)
+            blockLocs[key] = true
+            print(key,": ",blockLocs[key])
         end
-    end
 
-    assert(turtle.forward())
+        newDir = findLowestCell(flood,x,y)
+
+        print("Prev dir = ",orient," New Dir = ",newDir)
+
+        while(newDir ~= orient) do
+            if orient - newDir == 1 or orient - newDir == -3 then 
+                --print(orient," - ", newDir," == ",orient-newDir)
+                orient = left(orient)
+            elseif orient - newDir == -1 or orient - newDir == 3 then
+                orient = right(orient)
+            else
+                orient = right(orient)
+            end
+        end
+        hasLooped = true
+    until turtle.forward()
+    
+
     turtPosX, turtPosY = updatePos(x,y,orient)
     if flood[turtPosX][turtPosY] ~= 0 then
         flood[turtPosX][turtPosY] = "X"
     end
-    
+     
     return orient
 end
 
@@ -256,17 +321,20 @@ function readLog(flood)
     userI = io.read()
 end
 
---Main
-c1,c2,c3 = ...
-c1,c2,c3 = tonumber(c1),tonumber(c2),tonumber(c3)
---Change this when not dev testing
-if c1==nil or c2==nil or c3 == nil then
-    c1 = 52
-    c2 = 253
-    c3 = -47
+function startup()
+    --Change this when not dev testing
+    if c1==nil or c2==nil or c3 == nil then
+        c1 = 52
+        c2 = 253
+        c3 = -47
+    end
+    dest = vector.new(c1,c2,c3)
+    orient = getOrientation()
 end
-dest = vector.new(c1,c2,c3)
-orient = getOrientation()
+
+
+--Main
+startup()
 repeat
 currentLoc = vector.new(gps.locate(2,false))
 dist = calculateDistance(currentLoc,dest)
@@ -281,3 +349,4 @@ until(flood[turtPosX][turtPosY] == 0)
 repeat
     changeDest(flood,dest)
 until(flood[turtPosX][turtPosY] == 0) 
+
